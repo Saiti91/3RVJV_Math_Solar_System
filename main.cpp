@@ -8,18 +8,19 @@
 #define _USE_MATH_DEFINES
 #include <math.h>
 
+//définition de la structure Quaternion pour la rotation
 struct Quaternion {
     float w, x, y, z;
 
     Quaternion(float w_, float x_, float y_, float z_)
             : w(w_), x(x_), y(y_), z(z_) {}
-
+// Fonction pour créer un quaternion à partir d'un angle et d'un axe
     static Quaternion fromAxisAngle(float angleRad, float axisX, float axisY, float axisZ) {
         float half = angleRad * 0.5f;
         float s = sinf(half);
         return Quaternion(cosf(half), axisX * s, axisY * s, axisZ * s);
     }
-
+// Fonction pour normaliser le quaternion
     Quaternion multiply(const Quaternion& b) const {
         return Quaternion(
                 w * b.w - x * b.x - y * b.y - z * b.z,
@@ -28,7 +29,7 @@ struct Quaternion {
                 w * b.z + x * b.y - y * b.x + z * b.w
         );
     }
-
+// Fonction pour appliquer la rotation à un vecteur
     void rotateVector(float vx, float vy, float vz, float& rx, float& ry, float& rz) const {
         Quaternion v(0.0f, vx, vy, vz);
         Quaternion conj(w, -x, -y, -z);
@@ -39,7 +40,7 @@ struct Quaternion {
     }
 };
 
-<<<<<<< HEAD
+// Définition de la structure Matrice pour les transformations
 struct Matrice {
     float m[4][4];
 
@@ -48,13 +49,13 @@ struct Matrice {
             for (int j = 0; j < 4; ++j)
                 m[i][j] = (i == j) ? 1 : 0; // Matrice identité
     }
-
+// Fonction pour appliquer une rotation autour de l'axe Y
     void translate(float tx, float ty, float tz) {
         m[3][0] += tx;
         m[3][1] += ty;
         m[3][2] += tz;
     }
-
+// Fonction pour appliquer une rotation autour de l'axe Y
     void apply(float& x, float& y, float& z) const {
         float tx = m[0][0] * x + m[1][0] * y + m[2][0] * z + m[3][0];
         float ty = m[0][1] * x + m[1][1] * y + m[2][1] * z + m[3][1];
@@ -65,8 +66,6 @@ struct Matrice {
     }
 };
 
-=======
->>>>>>> origin/main
 struct Fragment {
     float x, y, z;
     float vx, vy, vz;
@@ -151,10 +150,7 @@ struct Moon {
     float orbitSpeed;
     float angle;
     bool active;
-<<<<<<< HEAD
     Matrice transformation;
-=======
->>>>>>> origin/main
     float x, y, z;
 
     Moon(float orbR, float r, float speed)
@@ -171,26 +167,18 @@ struct Moon {
 
     void draw() const {
         if (!active) return;
-<<<<<<< HEAD
 
         Matrice localTransform = transformation;
         localTransform.translate(x, 0.0f, z);
         glPushMatrix();
         glMultMatrixf(&localTransform.m[0][0]);
-=======
-        glPushMatrix();
-        glTranslatef(x, 0.0f, z);
->>>>>>> origin/main
         glutSolidSphere(radius, 16, 16);
         glPopMatrix();
     }
 };
 
 std::vector<Planet> planets;
-<<<<<<< HEAD
 Moon moon(3.0f, 0.5f, 1.5f);
-=======
->>>>>>> origin/main
 std::vector<Fragment> fragments;
 float lastTime = 0;
 bool supernovaTriggered = false;
@@ -243,6 +231,7 @@ void display() {
 
     glRotatef(cameraAngleX, 1, 0, 0);
     glRotatef(cameraAngleY, 0, 1, 0);
+    // Positionnement de la caméra
     gluLookAt(cameraX, cameraY, cameraZ, 0, 0, 0, 0, 1, 0);
 
     GLfloat light_position[] = { 0.0f, 0.0f, 0.0f, 1.0f };
@@ -251,7 +240,7 @@ void display() {
     glLightfv(GL_LIGHT0, GL_DIFFUSE, light_diffuse);
     glEnable(GL_LIGHTING);
     glEnable(GL_LIGHT0);
-
+    // Positionnement de la lumière
     glDisable(GL_LIGHTING);
     if (sunExpanding && sunRadius < 30.0f) {
         sunRadius += deltaTime * 10.0f;
@@ -277,7 +266,6 @@ void display() {
         GLfloat mat_diffuse[4];
         if (p.name == "Mercury") mat_diffuse[0] = 0.5f, mat_diffuse[1] = 0.5f, mat_diffuse[2] = 0.5f, mat_diffuse[3] = 1.0f;
         else if (p.name == "Venus") mat_diffuse[0] = 0.9f, mat_diffuse[1] = 0.7f, mat_diffuse[2] = 0.4f, mat_diffuse[3] = 1.0f;
-<<<<<<< HEAD
         else if (p.name == "Earth") {
             mat_diffuse[0] = 0.0f, mat_diffuse[1] = 0.5f, mat_diffuse[2] = 1.0f, mat_diffuse[3] = 1.0f;
             p.draw();
@@ -285,9 +273,6 @@ void display() {
             moon.update(deltaTime, p.x, p.z);
             moon.draw();
         }
-=======
-        else if (p.name == "Earth") mat_diffuse[0] = 0.0f, mat_diffuse[1] = 0.5f, mat_diffuse[2] = 1.0f, mat_diffuse[3] = 1.0f;
->>>>>>> origin/main
         else if (p.name == "Mars") mat_diffuse[0] = 1.0f, mat_diffuse[1] = 0.3f, mat_diffuse[2] = 0.3f, mat_diffuse[3] = 1.0f;
         else if (p.name == "Jupiter") mat_diffuse[0] = 0.9f, mat_diffuse[1] = 0.6f, mat_diffuse[2] = 0.4f, mat_diffuse[3] = 1.0f;
         else if (p.name == "Saturn") mat_diffuse[0] = 0.9f, mat_diffuse[1] = 0.8f, mat_diffuse[2] = 0.5f, mat_diffuse[3] = 1.0f;
@@ -324,7 +309,6 @@ int main(int argc, char** argv) {
     glutCreateWindow("Solar System - Supernova Version");
     glEnable(GL_DEPTH_TEST);
 
-<<<<<<< HEAD
     planets.emplace_back("Mercury", 12.0f, 0.5f, 4.0f); // Augmenté
     planets.emplace_back("Venus", 15.0f, 1.0f, 2.0f);    // Augmenté
     planets.emplace_back("Earth", 18.0f, 2.0f, 1.0f);    // Augmenté
@@ -335,17 +319,6 @@ int main(int argc, char** argv) {
     planets.emplace_back("Neptune", 50.0f, 2.0f, 0.1f);   // Augmenté
 
     Moon moon(5.0f, 0.5f, 1.5f); // Augmenté l'orbite de la Lune
-=======
-    planets.emplace_back("Mercury", 8.0f, 0.5f, 4.0f);
-    planets.emplace_back("Venus", 11.0f, 1.0f, 2.0f);
-    planets.emplace_back("Earth", 15.0f, 2.0f, 1.0f);
-    planets.emplace_back("Mars", 19.0f, 1.7f, 0.6f);
-    planets.emplace_back("Jupiter", 24.0f, 3.0f, 0.3f);
-    planets.emplace_back("Saturn", 30.0f, 2.5f, 0.2f);
-    planets.emplace_back("Uranus", 35.0f, 2.0f, 0.15f);
-    planets.emplace_back("Neptune", 40.0f, 2.0f, 0.1f);
-    Moon moon(3.0f, 0.5f, 1.5f);
->>>>>>> origin/main
 
     glutDisplayFunc(display);
     glutReshapeFunc(reshape);
