@@ -1,0 +1,5 @@
+A faire:
+
+movement camera stable GluLookAt !
+Rotation autre que par rapport a Y matrice => rotation autour d'un axe quelconque
+normaliser les quaternion 
