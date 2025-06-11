@@ -8,18 +8,19 @@
 #define _USE_MATH_DEFINES
 #include <math.h>
 
+//définition de la structure Quaternion pour la rotation
 struct Quaternion {
     float w, x, y, z;
 
     Quaternion(float w_, float x_, float y_, float z_)
             : w(w_), x(x_), y(y_), z(z_) {}
-
+// Fonction pour créer un quaternion à partir d'un angle et d'un axe
     static Quaternion fromAxisAngle(float angleRad, float axisX, float axisY, float axisZ) {
         float half = angleRad * 0.5f;
         float s = sinf(half);
         return Quaternion(cosf(half), axisX * s, axisY * s, axisZ * s);
     }
-
+// Fonction pour normaliser le quaternion
     Quaternion multiply(const Quaternion& b) const {
         return Quaternion(
                 w * b.w - x * b.x - y * b.y - z * b.z,
@@ -28,7 +29,7 @@ struct Quaternion {
                 w * b.z + x * b.y - y * b.x + z * b.w
         );
     }
-
+// Fonction pour appliquer la rotation à un vecteur
     void rotateVector(float vx, float vy, float vz, float& rx, float& ry, float& rz) const {
         Quaternion v(0.0f, vx, vy, vz);
         Quaternion conj(w, -x, -y, -z);
@@ -39,7 +40,7 @@ struct Quaternion {
     }
 };
 
-<<<<<<< HEAD
+// Définition de la structure Matrice pour les transformations
 struct Matrice {
     float m[4][4];
 
@@ -48,13 +49,13 @@ struct Matrice {
             for (int j = 0; j < 4; ++j)
                 m[i][j] = (i == j) ? 1 : 0; // Matrice identité
     }
-
+// Fonction pour appliquer une rotation autour de l'axe Y
     void translate(float tx, float ty, float tz) {
         m[3][0] += tx;
         m[3][1] += ty;
         m[3][2] += tz;
     }
-
+// Fonction pour appliquer une rotation autour de l'axe Y
     void apply(float& x, float& y, float& z) const {
         float tx = m[0][0] * x + m[1][0] * y + m[2][0] * z + m[3][0];
         float ty = m[0][1] * x + m[1][1] * y + m[2][1] * z + m[3][1];
@@ -243,6 +244,7 @@ void display() {
 
     glRotatef(cameraAngleX, 1, 0, 0);
     glRotatef(cameraAngleY, 0, 1, 0);
+    // Positionnement de la caméra
     gluLookAt(cameraX, cameraY, cameraZ, 0, 0, 0, 0, 1, 0);
 
     GLfloat light_position[] = { 0.0f, 0.0f, 0.0f, 1.0f };
@@ -251,7 +253,7 @@ void display() {
     glLightfv(GL_LIGHT0, GL_DIFFUSE, light_diffuse);
     glEnable(GL_LIGHTING);
     glEnable(GL_LIGHT0);
-
+    // Positionnement de la lumière
     glDisable(GL_LIGHTING);
     if (sunExpanding && sunRadius < 30.0f) {
         sunRadius += deltaTime * 10.0f;
