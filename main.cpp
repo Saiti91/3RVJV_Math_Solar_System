@@ -39,6 +39,7 @@ struct Quaternion {
     }
 };
 
+<<<<<<< HEAD
 struct Matrice {
     float m[4][4];
 
@@ -64,6 +65,8 @@ struct Matrice {
     }
 };
 
+=======
+>>>>>>> origin/main
 struct Fragment {
     float x, y, z;
     float vx, vy, vz;
@@ -148,7 +151,10 @@ struct Moon {
     float orbitSpeed;
     float angle;
     bool active;
+<<<<<<< HEAD
     Matrice transformation;
+=======
+>>>>>>> origin/main
     float x, y, z;
 
     Moon(float orbR, float r, float speed)
@@ -165,18 +171,26 @@ struct Moon {
 
     void draw() const {
         if (!active) return;
+<<<<<<< HEAD
 
         Matrice localTransform = transformation;
         localTransform.translate(x, 0.0f, z);
         glPushMatrix();
         glMultMatrixf(&localTransform.m[0][0]);
+=======
+        glPushMatrix();
+        glTranslatef(x, 0.0f, z);
+>>>>>>> origin/main
         glutSolidSphere(radius, 16, 16);
         glPopMatrix();
     }
 };
 
 std::vector<Planet> planets;
+<<<<<<< HEAD
 Moon moon(3.0f, 0.5f, 1.5f);
+=======
+>>>>>>> origin/main
 std::vector<Fragment> fragments;
 float lastTime = 0;
 bool supernovaTriggered = false;
@@ -263,6 +277,7 @@ void display() {
         GLfloat mat_diffuse[4];
         if (p.name == "Mercury") mat_diffuse[0] = 0.5f, mat_diffuse[1] = 0.5f, mat_diffuse[2] = 0.5f, mat_diffuse[3] = 1.0f;
         else if (p.name == "Venus") mat_diffuse[0] = 0.9f, mat_diffuse[1] = 0.7f, mat_diffuse[2] = 0.4f, mat_diffuse[3] = 1.0f;
+<<<<<<< HEAD
         else if (p.name == "Earth") {
             mat_diffuse[0] = 0.0f, mat_diffuse[1] = 0.5f, mat_diffuse[2] = 1.0f, mat_diffuse[3] = 1.0f;
             p.draw();
@@ -270,6 +285,9 @@ void display() {
             moon.update(deltaTime, p.x, p.z);
             moon.draw();
         }
+=======
+        else if (p.name == "Earth") mat_diffuse[0] = 0.0f, mat_diffuse[1] = 0.5f, mat_diffuse[2] = 1.0f, mat_diffuse[3] = 1.0f;
+>>>>>>> origin/main
         else if (p.name == "Mars") mat_diffuse[0] = 1.0f, mat_diffuse[1] = 0.3f, mat_diffuse[2] = 0.3f, mat_diffuse[3] = 1.0f;
         else if (p.name == "Jupiter") mat_diffuse[0] = 0.9f, mat_diffuse[1] = 0.6f, mat_diffuse[2] = 0.4f, mat_diffuse[3] = 1.0f;
         else if (p.name == "Saturn") mat_diffuse[0] = 0.9f, mat_diffuse[1] = 0.8f, mat_diffuse[2] = 0.5f, mat_diffuse[3] = 1.0f;
@@ -306,6 +324,7 @@ int main(int argc, char** argv) {
     glutCreateWindow("Solar System - Supernova Version");
     glEnable(GL_DEPTH_TEST);
 
+<<<<<<< HEAD
     planets.emplace_back("Mercury", 12.0f, 0.5f, 4.0f); // Augmenté
     planets.emplace_back("Venus", 15.0f, 1.0f, 2.0f);    // Augmenté
     planets.emplace_back("Earth", 18.0f, 2.0f, 1.0f);    // Augmenté
@@ -316,6 +335,17 @@ int main(int argc, char** argv) {
     planets.emplace_back("Neptune", 50.0f, 2.0f, 0.1f);   // Augmenté
 
     Moon moon(5.0f, 0.5f, 1.5f); // Augmenté l'orbite de la Lune
+=======
+    planets.emplace_back("Mercury", 8.0f, 0.5f, 4.0f);
+    planets.emplace_back("Venus", 11.0f, 1.0f, 2.0f);
+    planets.emplace_back("Earth", 15.0f, 2.0f, 1.0f);
+    planets.emplace_back("Mars", 19.0f, 1.7f, 0.6f);
+    planets.emplace_back("Jupiter", 24.0f, 3.0f, 0.3f);
+    planets.emplace_back("Saturn", 30.0f, 2.5f, 0.2f);
+    planets.emplace_back("Uranus", 35.0f, 2.0f, 0.15f);
+    planets.emplace_back("Neptune", 40.0f, 2.0f, 0.1f);
+    Moon moon(3.0f, 0.5f, 1.5f);
+>>>>>>> origin/main
 
     glutDisplayFunc(display);
     glutReshapeFunc(reshape);
