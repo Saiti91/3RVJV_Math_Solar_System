@@ -183,11 +183,18 @@ private:
             material->apply();
             glPushMatrix();
             glTranslatef(position.x, position.y, position.z);
-            Vector3D axis;
-            float angleSelf;
-            Quaternion rotQuat = Quaternion::fromAxisAngle(rotationAngle, 0.0f, 1.0f, 0.0f);
-            rotQuat.toAxisAngle(axis, angleSelf);
-            glRotatef(angleSelf * 180.0f / M_PI, axis.x, axis.y, axis.z);
+
+            // --- MATRICE de rotation sur Y (rotation sur soi-même) ---
+            float c = std::cos(rotationAngle);
+            float s = std::sin(rotationAngle);
+            float mat[16] = {
+                    c,  0,  s, 0,
+                    0,  1,  0, 0,
+                    -s,  0,  c, 0,
+                    0,  0,  0, 1
+            };
+            glMultMatrixf(mat);
+
             glColor3f(material->diffuse.x, material->diffuse.y, material->diffuse.z);
             glutSolidSphere(radius, 32, 32);
             glPopMatrix();
