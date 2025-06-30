@@ -132,46 +132,99 @@ private:
             glEnable(lightID);
         }
     };
+
     struct Planet {
         std::string name;
-        float orbitRadius, radius, orbitSpeed, rotationSpeed, angle, rotationAngle;
+        float orbitRadius;
+        float radius;
+        float orbitSpeed;
+        float rotationSpeed;
+        float angle;
+        float rotationAngle;
         bool active;
-        Vector3D position, orbitAxis;
+        Vector3D position;
+        Vector3D orbitAxis; // <-- NOUVEL ATTRIBUT pour l’axe de révolution !
         const Material* material;
-        // Nouvelle propriété pour planète mère (pour la lune)
-        int parentIndex; // -1 si pas de parent
-        Planet(const std::string& name, const Material* material, float orbRadius, float radius, float orbSpeed, float rotSpeed, Vector3D orbitAxis = Vector3D(0,1,0), int parentIndex = -1)
+
+        // Le constructeur accepte orbitAxis (défaut : Y)
+        Planet(const std::string& name, const Material* material,
+               float orbRadius, float radius, float orbSpeed, float rotSpeed,
+               Vector3D orbitAxis_ = Vector3D(0, 1, 0))
                 : name(name), material(material),
-                  orbitRadius(orbRadius), radius(radius), orbitSpeed(orbSpeed), rotationSpeed(rotSpeed),
-                  angle(0.0f), rotationAngle(0.0f), active(true), position(Vector3D(0,0,0)),
-                  orbitAxis(orbitAxis), parentIndex(parentIndex) {}
-        void update(float deltaTime, const std::vector<Planet>& planets) {
+                  orbitRadius(orbRadius), radius(radius),
+                  orbitSpeed(orbSpeed), rotationSpeed(rotSpeed),
+                  angle(0.0f), rotationAngle(0.0f), active(true),
+                  position(Vector3D(0.0f, 0.0f, 0.0f)),
+                  orbitAxis(orbitAxis_)
+        {
+        }
+
+        void update(float deltaTime) {
             if (!active) return;
-            angle += orbitSpeed * deltaTime; if (angle > 2 * M_PI) angle -= 2 * M_PI;
-            rotationAngle += rotationSpeed * deltaTime; if (rotationAngle > 2 * M_PI) rotationAngle -= 2 * M_PI;
+
+            // Avancement de l’angle d’orbite
+            angle += orbitSpeed * deltaTime;
+            if (angle > 2 * M_PI) angle -= 2 * M_PI;
+
+            // Avancement de la rotation sur elle-même
+            rotationAngle += rotationSpeed * deltaTime;
+            if (rotationAngle > 2 * M_PI) rotationAngle -= 2 * M_PI;
+
+            // Orbite autour de l’axe choisi
             Quaternion q = Quaternion::fromAxisAngle(angle, orbitAxis.x, orbitAxis.y, orbitAxis.z);
             Vector3D orbitPos(orbitRadius, 0.0f, 0.0f);
             Vector3D rotatedPos = q.rotateVector(orbitPos);
-            if (parentIndex >= 0) {
-                // La position de base = position courante de la planète mère
-                position = planets[parentIndex].position + rotatedPos;
-            } else {
-                position = rotatedPos;
-            }
+
+            position = rotatedPos;
         }
+
         void draw() const {
             if (!active) return;
+
+            // Appliquer matériau
             material->apply();
+
+            // Sauvegarde la matrice courante
             glPushMatrix();
+
+            // Translation à la position
             glTranslatef(position.x, position.y, position.z);
+
+            // Rotation sur elle-même (toujours sur Y, modifie si tu veux !)
             Vector3D axis;
-            float angleRad;
+            float angleSelf;
             Quaternion rotQuat = Quaternion::fromAxisAngle(rotationAngle, 0.0f, 1.0f, 0.0f);
-            rotQuat.toAxisAngle(axis, angleRad);
-            glRotatef(angleRad * 180.0f / M_PI, axis.x, axis.y, axis.z);
+            rotQuat.toAxisAngle(axis, angleSelf);
+            glRotatef(angleSelf * 180.0f / M_PI, axis.x, axis.y, axis.z);
+
             glColor3f(material->diffuse.x, material->diffuse.y, material->diffuse.z);
             glutSolidSphere(radius, 32, 32);
+
+            // Restore la matrice
             glPopMatrix();
+        }
+
+        std::vector<Vector3D> createFragmentPositions(int count) {
+            std::vector<Vector3D> fragments;
+            std::random_device rd;
+            std::mt19937 gen(rd());
+            std::uniform_real_distribution<float> angleDist(0.0f, 2.0f * M_PI);
+            std::uniform_real_distribution<float> elevationDist(0.0f, M_PI);
+            std::uniform_real_distribution<float> speedDist(5.0f, 15.0f);
+
+            for (int i = 0; i < count; ++i) {
+                float angle1 = angleDist(gen);
+                float angle2 = elevationDist(gen);
+                float speed = speedDist(gen);
+
+                float vx = speed * std::sin(angle2) * std::cos(angle1);
+                float vy = speed * std::cos(angle2);
+                float vz = speed * std::sin(angle2) * std::sin(angle1);
+
+                fragments.push_back(position);
+            }
+
+            return fragments;
         }
     };
 
@@ -257,18 +310,16 @@ private:
         lights.push_back(Light(GL_LIGHT1, Vector3D(0.0f, 30.0f, 0.0f), Vector3D(0.2f, 0.2f, 0.2f), Vector3D(0.7f, 0.7f, 0.7f), Vector3D(0.5f, 0.5f, 0.5f)));
     }
     void initPlanets() {
-        planets.push_back(Planet("Mercury", &materials[1], 8.0f, 0.5f, 4.0f, 0.02f));
-        planets.push_back(Planet("Venus", &materials[2], 11.0f, 1.0f, 2.0f, 0.015f));
-        // indexTerre = 2
-        planets.push_back(Planet("Earth", &materials[3], 15.0f, 1.2f, 1.0f, 0.01f));
-        // La lune orbite autour de la Terre (index 2)
-        planets.push_back(Planet("Moon", &materials[10], 2.0f, 0.3f, 4.0f, 0.04f, Vector3D(0,1,0), 2));
-        planets.push_back(Planet("Mars", &materials[4], 19.0f, 0.7f, 0.6f, 0.008f));
-        planets.push_back(Planet("Jupiter", &materials[5], 24.0f, 3.0f, 0.3f, 0.005f));
-        planets.push_back(Planet("Saturn", &materials[6], 30.0f, 2.5f, 0.2f, 0.004f));
-        planets.push_back(Planet("Uranus", &materials[7], 35.0f, 2.0f, 0.15f, 0.003f));
-        planets.push_back(Planet("Neptune", &materials[8], 40.0f, 2.0f, 0.1f, 0.002f));
+        planets.push_back(Planet("Mercury", &materials[1], 8.0f, 0.5f, 4.0f, 0.02f, Vector3D(0, 1, 0)));   // Y
+        planets.push_back(Planet("Venus",   &materials[2], 11.0f, 1.0f, 2.0f, 0.015f, Vector3D(1, 0, 0)));  // X
+        planets.push_back(Planet("Earth",   &materials[3], 15.0f, 1.2f, 1.0f, 0.01f,  Vector3D(0, 0, 1)));  // Z
+        planets.push_back(Planet("Mars",    &materials[4], 19.0f, 0.7f, 0.6f, 0.008f, Vector3D(0.707, 0.707, 0))); // Axe diagonal XY
+        planets.push_back(Planet("Jupiter", &materials[5], 24.0f, 3.0f, 0.3f, 0.005f, Vector3D(0, 1, 0)));
+        planets.push_back(Planet("Saturn",  &materials[6], 30.0f, 2.5f, 0.2f, 0.004f, Vector3D(0, 1, 0)));
+        planets.push_back(Planet("Uranus",  &materials[7], 35.0f, 2.0f, 0.15f, 0.003f, Vector3D(1, 0, 1).normalize()));
+        planets.push_back(Planet("Neptune", &materials[8], 40.0f, 2.0f, 0.1f, 0.002f, Vector3D(0, 1, 0)));
     }
+
     void setupOpenGL() {
         glEnable(GL_DEPTH_TEST);
         glEnable(GL_LIGHTING);
@@ -279,7 +330,7 @@ private:
     }
     void updateScene() {
         for (size_t i = 0; i < planets.size(); ++i) {
-            planets[i].update(deltaTime, planets);
+            planets[i].update(deltaTime);
         }
     }
     void renderScene() {
