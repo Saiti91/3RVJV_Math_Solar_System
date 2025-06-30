@@ -28,17 +28,6 @@ public:
     }
 };
 
-class Matrix3x3 {
-public:
-    float m[3][3];
-    Matrix3x3() { for (int i = 0; i < 3; i++) for (int j = 0; j < 3; j++) m[i][j] = (i == j) ? 1.0f : 0.0f; }
-    Matrix3x3(float m00, float m01, float m02, float m10, float m11, float m12, float m20, float m21, float m22) {
-        m[0][0]=m00; m[0][1]=m01; m[0][2]=m02;
-        m[1][0]=m10; m[1][1]=m11; m[1][2]=m12;
-        m[2][0]=m20; m[2][1]=m21; m[2][2]=m22;
-    }
-};
-
 class Matrix4x4 {
 public:
     float m[4][4];
@@ -63,10 +52,10 @@ public:
     Quaternion(float w_, float x_, float y_, float z_) : w(w_), x(x_), y(y_), z(z_) {}
     Quaternion operator*(const Quaternion& q) const {
         return Quaternion(
-            w * q.w - x * q.x - y * q.y - z * q.z,
-            w * q.x + x * q.w + y * q.z - z * q.y,
-            w * q.y - x * q.z + y * q.w + z * q.x,
-            w * q.z + x * q.y - y * q.x + z * q.w
+                w * q.w - x * q.x - y * q.y - z * q.z,
+                w * q.x + x * q.w + y * q.z - z * q.y,
+                w * q.y - x * q.z + y * q.w + z * q.x,
+                w * q.z + x * q.y - y * q.x + z * q.w
         );
     }
     Quaternion conjugate() const { return Quaternion(w, -x, -y, -z); }
@@ -133,74 +122,74 @@ private:
         }
     };
 
+    struct Fragment {
+        Vector3D position, velocity;
+        float radius;
+        const Material* material;
+        Fragment(const Vector3D& pos, const Vector3D& vel, float r, const Material* mat)
+                : position(pos), velocity(vel), radius(r), material(mat) {}
+        void update(float deltaTime) {
+            position.x += velocity.x * deltaTime;
+            position.y += velocity.y * deltaTime;
+            position.z += velocity.z * deltaTime;
+        }
+        void draw() const {
+            material->apply();
+            glPushMatrix();
+            glTranslatef(position.x, position.y, position.z);
+            glColor3f(material->diffuse.x, material->diffuse.y, material->diffuse.z);
+            glutSolidSphere(radius, 8, 8);
+            glPopMatrix();
+        }
+    };
+
     struct Planet {
         std::string name;
-        float orbitRadius;
-        float radius;
-        float orbitSpeed;
-        float rotationSpeed;
-        float angle;
-        float rotationAngle;
+        float orbitRadius, radius, orbitSpeed, rotationSpeed, angle, rotationAngle;
         bool active;
-        Vector3D position;
-        Vector3D orbitAxis; // <-- NOUVEL ATTRIBUT pour l’axe de révolution !
+        Vector3D position, orbitAxis;
         const Material* material;
+        int parentIndex;
 
-        // Le constructeur accepte orbitAxis (défaut : Y)
         Planet(const std::string& name, const Material* material,
                float orbRadius, float radius, float orbSpeed, float rotSpeed,
-               Vector3D orbitAxis_ = Vector3D(0, 1, 0))
+               Vector3D orbitAxis_ = Vector3D(0, 1, 0), int parentIndex_ = -1)
                 : name(name), material(material),
                   orbitRadius(orbRadius), radius(radius),
                   orbitSpeed(orbSpeed), rotationSpeed(rotSpeed),
                   angle(0.0f), rotationAngle(0.0f), active(true),
                   position(Vector3D(0.0f, 0.0f, 0.0f)),
-                  orbitAxis(orbitAxis_)
-        {
-        }
+                  orbitAxis(orbitAxis_), parentIndex(parentIndex_) {}
 
-        void update(float deltaTime) {
+        void update(float deltaTime, const std::vector<Planet>& planets) {
             if (!active) return;
-
-            // Avancement de l’angle d’orbite
             angle += orbitSpeed * deltaTime;
             if (angle > 2 * M_PI) angle -= 2 * M_PI;
-
-            // Avancement de la rotation sur elle-même
             rotationAngle += rotationSpeed * deltaTime;
             if (rotationAngle > 2 * M_PI) rotationAngle -= 2 * M_PI;
 
-            // Orbite autour de l’axe choisi
             Quaternion q = Quaternion::fromAxisAngle(angle, orbitAxis.x, orbitAxis.y, orbitAxis.z);
             Vector3D orbitPos(orbitRadius, 0.0f, 0.0f);
             Vector3D rotatedPos = q.rotateVector(orbitPos);
-
-            position = rotatedPos;
+            if (parentIndex >= 0 && parentIndex < planets.size()) {
+                position = planets[parentIndex].position + rotatedPos;
+            } else {
+                position = rotatedPos;
+            }
         }
 
         void draw() const {
             if (!active) return;
-
-            // Appliquer matériau
             material->apply();
-
-            // Sauvegarde la matrice courante
             glPushMatrix();
-
-            // Translation à la position
             glTranslatef(position.x, position.y, position.z);
-
-            // Rotation sur elle-même (toujours sur Y, modifie si tu veux !)
             Vector3D axis;
             float angleSelf;
             Quaternion rotQuat = Quaternion::fromAxisAngle(rotationAngle, 0.0f, 1.0f, 0.0f);
             rotQuat.toAxisAngle(axis, angleSelf);
             glRotatef(angleSelf * 180.0f / M_PI, axis.x, axis.y, axis.z);
-
             glColor3f(material->diffuse.x, material->diffuse.y, material->diffuse.z);
             glutSolidSphere(radius, 32, 32);
-
-            // Restore la matrice
             glPopMatrix();
         }
 
@@ -210,20 +199,11 @@ private:
             std::mt19937 gen(rd());
             std::uniform_real_distribution<float> angleDist(0.0f, 2.0f * M_PI);
             std::uniform_real_distribution<float> elevationDist(0.0f, M_PI);
-            std::uniform_real_distribution<float> speedDist(5.0f, 15.0f);
-
             for (int i = 0; i < count; ++i) {
                 float angle1 = angleDist(gen);
                 float angle2 = elevationDist(gen);
-                float speed = speedDist(gen);
-
-                float vx = speed * std::sin(angle2) * std::cos(angle1);
-                float vy = speed * std::cos(angle2);
-                float vz = speed * std::sin(angle2) * std::sin(angle1);
-
-                fragments.push_back(position);
+                fragments.push_back(position); // centre de la planète
             }
-
             return fragments;
         }
     };
@@ -288,6 +268,7 @@ private:
     std::vector<Material> materials;
     std::vector<Light> lights;
     std::vector<Planet> planets;
+    std::vector<Fragment> fragments;
     float sunRadius;
     bool sunExpanding, supernovaTriggered, firstMouse;
     float lastX, lastY;
@@ -310,14 +291,15 @@ private:
         lights.push_back(Light(GL_LIGHT1, Vector3D(0.0f, 30.0f, 0.0f), Vector3D(0.2f, 0.2f, 0.2f), Vector3D(0.7f, 0.7f, 0.7f), Vector3D(0.5f, 0.5f, 0.5f)));
     }
     void initPlanets() {
-        planets.push_back(Planet("Mercury", &materials[1], 8.0f, 0.5f, 4.0f, 0.02f, Vector3D(0, 1, 0)));   // Y
-        planets.push_back(Planet("Venus",   &materials[2], 11.0f, 1.0f, 2.0f, 0.015f, Vector3D(1, 0, 0)));  // X
-        planets.push_back(Planet("Earth",   &materials[3], 15.0f, 1.2f, 1.0f, 0.01f,  Vector3D(0, 0, 1)));  // Z
-        planets.push_back(Planet("Mars",    &materials[4], 19.0f, 0.7f, 0.6f, 0.008f, Vector3D(0.707, 0.707, 0))); // Axe diagonal XY
-        planets.push_back(Planet("Jupiter", &materials[5], 24.0f, 3.0f, 0.3f, 0.005f, Vector3D(0, 1, 0)));
-        planets.push_back(Planet("Saturn",  &materials[6], 30.0f, 2.5f, 0.2f, 0.004f, Vector3D(0, 1, 0)));
-        planets.push_back(Planet("Uranus",  &materials[7], 35.0f, 2.0f, 0.15f, 0.003f, Vector3D(1, 0, 1).normalize()));
-        planets.push_back(Planet("Neptune", &materials[8], 40.0f, 2.0f, 0.1f, 0.002f, Vector3D(0, 1, 0)));
+        planets.push_back(Planet("Mercury", &materials[1], 8.0f, 0.5f, 4.0f, 0.02f, Vector3D(0,1,0)));
+        planets.push_back(Planet("Venus", &materials[2], 11.0f, 1.0f, 2.0f, 0.015f, Vector3D(0,1,0)));
+        planets.push_back(Planet("Earth", &materials[3], 15.0f, 1.2f, 1.0f, 0.01f, Vector3D(0,1,0)));
+        planets.push_back(Planet("Moon", &materials[10], 2.0f, 0.3f, 4.0f, 0.04f, Vector3D(0,1,0), 2)); // 2 = index Terre
+        planets.push_back(Planet("Mars", &materials[4], 19.0f, 0.7f, 0.6f, 0.008f, Vector3D(1,1,0).normalize()));
+        planets.push_back(Planet("Jupiter", &materials[5], 24.0f, 3.0f, 0.3f, 0.005f, Vector3D(0,1,0)));
+        planets.push_back(Planet("Saturn", &materials[6], 30.0f, 2.5f, 0.2f, 0.004f, Vector3D(0,1,0)));
+        planets.push_back(Planet("Uranus", &materials[7], 35.0f, 2.0f, 0.15f, 0.003f, Vector3D(0,1,0)));
+        planets.push_back(Planet("Neptune", &materials[8], 40.0f, 2.0f, 0.1f, 0.002f, Vector3D(0,1,0)));
     }
 
     void setupOpenGL() {
@@ -328,11 +310,44 @@ private:
         glLightModelfv(GL_LIGHT_MODEL_AMBIENT, globalAmbient);
         for (const Light& light : lights) light.apply();
     }
+
     void updateScene() {
-        for (size_t i = 0; i < planets.size(); ++i) {
-            planets[i].update(deltaTime);
+        // Supernova logic
+        if (sunExpanding && sunRadius < 30.0f) {
+            sunRadius += deltaTime * 10.0f;
+            for (Planet& p : planets) {
+                if (p.active && p.position.magnitude() <= sunRadius) {
+                    // Destroy planet, create fragments
+                    std::vector<Vector3D> fragmentPositions = p.createFragmentPositions(50);
+                    std::random_device rd;
+                    std::mt19937 gen(rd());
+                    std::uniform_real_distribution<float> angleDist(0.0f, 2.0f * M_PI);
+                    std::uniform_real_distribution<float> elevationDist(0.0f, M_PI);
+                    std::uniform_real_distribution<float> speedDist(5.0f, 15.0f);
+
+                    for (const Vector3D& pos : fragmentPositions) {
+                        float angle1 = angleDist(gen);
+                        float angle2 = elevationDist(gen);
+                        float speed = speedDist(gen);
+                        float vx = speed * std::sin(angle2) * std::cos(angle1);
+                        float vy = speed * std::cos(angle2);
+                        float vz = speed * std::sin(angle2) * std::sin(angle1);
+                        fragments.push_back(Fragment(pos, Vector3D(vx, vy, vz), p.radius * 0.1f, &materials[9]));
+                    }
+                    p.active = false;
+                }
+            }
+            if (sunRadius >= 30.0f) {
+                supernovaTriggered = true;
+            }
         }
+
+        for (size_t i = 0; i < planets.size(); ++i) {
+            planets[i].update(deltaTime, planets);
+        }
+        for (Fragment& f : fragments) f.update(deltaTime);
     }
+
     void renderScene() {
         glClearColor(0.0f, 0.0f, 0.1f, 1.0f);
         glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
@@ -341,15 +356,20 @@ private:
         glMatrixMode(GL_MODELVIEW); glLoadIdentity();
         Vector3D cameraTarget = camera.position + camera.front;
         gluLookAt(camera.position.x, camera.position.y, camera.position.z, cameraTarget.x, cameraTarget.y, cameraTarget.z, camera.up.x, camera.up.y, camera.up.z);
+
         for (const Light& light : lights) light.apply();
+
         materials[0].apply();
         glPushMatrix();
         glColor3f(1.0f, 0.9f, 0.2f);
         glutSolidSphere(sunRadius, 32, 32);
         glPopMatrix();
+
         for (const Planet& p : planets) p.draw();
+        for (const Fragment& f : fragments) f.draw();
         glutSwapBuffers();
     }
+
     static void displayCallback() { instance->display(); }
     static void reshapeCallback(int width, int height) { instance->reshape(width, height); }
     static void keyboardCallback(unsigned char key, int x, int y) { instance->keyboard(key, x, y); }
@@ -357,6 +377,7 @@ private:
     static void mouseCallback(int button, int state, int x, int y) { instance->mouse(button, state, x, y); }
     static void motionCallback(int x, int y) { instance->motion(x, y); }
     static void idleCallback() { instance->idle(); }
+
     void display() {
         float currentTime = glutGet(GLUT_ELAPSED_TIME) / 1000.0f;
         deltaTime = currentTime - lastFrame;
@@ -365,7 +386,11 @@ private:
         renderScene();
     }
     void reshape(int w, int h) { width = w; height = h; glViewport(0, 0, width, height); }
-    void keyboard(unsigned char key, int x, int y) { if (key == 27) exit(0); camera.processKeyboard(key, deltaTime); }
+    void keyboard(unsigned char key, int x, int y) {
+        if (key == 27) exit(0);
+        camera.processKeyboard(key, deltaTime);
+        if (key == ' ') triggerSupernova();
+    }
     void special(int key, int x, int y) { camera.processSpecialKeys(key, deltaTime); }
     void mouse(int button, int state, int x, int y) {
         if (button == 3 || button == 4) {
@@ -383,6 +408,12 @@ private:
         camera.processMouseMovement(xoffset, yoffset);
     }
     void idle() { glutPostRedisplay(); }
+
+    void triggerSupernova() {
+        if (!supernovaTriggered) {
+            sunExpanding = true;
+        }
+    }
 public:
     SolarSystemApp(int argc, char** argv, int windowWidth = 800, int windowHeight = 600)
             : width(windowWidth), height(windowHeight), lastFrame(0.0f), deltaTime(0.0f),
@@ -392,7 +423,7 @@ public:
         glutInit(&argc, argv);
         glutInitDisplayMode(GLUT_DOUBLE | GLUT_RGBA | GLUT_DEPTH);
         glutInitWindowSize(width, height);
-        glutCreateWindow("Solar System - Supernova (with Moon orbiting Earth)");
+        glutCreateWindow("Solar System - Supernova + Moon orbit");
         std::cout << "OpenGL version: " << glGetString(GL_VERSION) << std::endl;
         initMaterials();
         initLights();
