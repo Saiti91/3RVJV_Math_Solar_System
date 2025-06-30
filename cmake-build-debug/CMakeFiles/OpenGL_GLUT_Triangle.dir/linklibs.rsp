@@ -1,0 +1,1 @@
+  -LC:/Users/Thibault/Documents/OpenGL/3RVJV_Math_Solar_System/./freeglut/lib/x64  -lglu32 -lopengl32 -lfreeglut -lkernel32 -luser32 -lgdi32 -lwinspool -lshell32 -lole32 -loleaut32 -luuid -lcomdlg32 -ladvapi32 

@@ -1,329 +1,234 @@
+#include <GL/glew.h>
 #include <GL/freeglut.h>
 #include <cmath>
 #include <vector>
 #include <string>
 #include <iostream>
-#include <cstdlib>
+#include <algorithm>
 
-#define _USE_MATH_DEFINES
-#include <math.h>
+template<typename T>
+T clamp(T v, T lo, T hi) { return std::min(std::max(v, lo), hi); }
 
-//définition de la structure Quaternion pour la rotation
-struct Quaternion {
-    float w, x, y, z;
-
-    Quaternion(float w_, float x_, float y_, float z_)
-            : w(w_), x(x_), y(y_), z(z_) {}
-// Fonction pour créer un quaternion à partir d'un angle et d'un axe
-    static Quaternion fromAxisAngle(float angleRad, float axisX, float axisY, float axisZ) {
-        float half = angleRad * 0.5f;
-        float s = sinf(half);
-        return Quaternion(cosf(half), axisX * s, axisY * s, axisZ * s);
+class Vector3D {
+public:
+    float x, y, z;
+    Vector3D() : x(0.0f), y(0.0f), z(0.0f) {}
+    Vector3D(float x_, float y_, float z_) : x(x_), y(y_), z(z_) {}
+    Vector3D operator+(const Vector3D& v) const { return { x + v.x, y + v.y, z + v.z }; }
+    Vector3D operator-(const Vector3D& v) const { return { x - v.x, y - v.y, z - v.z }; }
+    Vector3D operator*(float s) const { return { x * s, y * s, z * s }; }
+    float dot(const Vector3D& v) const { return x * v.x + y * v.y + z * v.z; }
+    Vector3D cross(const Vector3D& v) const {
+        return { y * v.z - z * v.y, z * v.x - x * v.z, x * v.y - y * v.x };
     }
-// Fonction pour normaliser le quaternion
-    Quaternion multiply(const Quaternion& b) const {
+    float magnitude() const { return std::sqrt(x * x + y * y + z * z); }
+    Vector3D normalize() const {
+        float m = magnitude();
+        return (m > 1e-6f) ? Vector3D(x / m, y / m, z / m) : *this;
+    }
+};
+
+class Quaternion {
+public:
+    float w, x, y, z;
+    Quaternion() : w(1.0f), x(0.0f), y(0.0f), z(0.0f) {}
+    Quaternion(float w_, float x_, float y_, float z_) : w(w_), x(x_), y(y_), z(z_) {}
+    Quaternion normalize() const {
+        float n = std::sqrt(w * w + x * x + y * y + z * z);
+        return (n > 1e-6f) ? Quaternion(w / n, x / n, y / n, z / n) : Quaternion(1.0f, 0.0f, 0.0f, 0.0f);
+    }
+    static Quaternion fromAxisAngle(float angle, float ax, float ay, float az) {
+        Vector3D A(ax, ay, az);
+        A = A.normalize();
+        float ha = angle * 0.5f;
+        float s = std::sin(ha);
+        return Quaternion(std::cos(ha), A.x * s, A.y * s, A.z * s).normalize();
+    }
+    Vector3D rotateVector(const Vector3D& v) const {
+        Quaternion qn = this->normalize();
+        Quaternion p(0.0f, v.x, v.y, v.z);
+        Quaternion r = qn * p * qn.conjugate();
+        return { r.x, r.y, r.z };
+    }
+    Quaternion operator*(const Quaternion& q) const {
         return Quaternion(
-                w * b.w - x * b.x - y * b.y - z * b.z,
-                w * b.x + x * b.w + y * b.z - z * b.y,
-                w * b.y - x * b.z + y * b.w + z * b.x,
-                w * b.z + x * b.y - y * b.x + z * b.w
+                w * q.w - x * q.x - y * q.y - z * q.z,
+                w * q.x + x * q.w + y * q.z - z * q.y,
+                w * q.y - x * q.z + y * q.w + z * q.x,
+                w * q.z + x * q.y - y * q.x + z * q.w
         );
     }
-// Fonction pour appliquer la rotation à un vecteur
-    void rotateVector(float vx, float vy, float vz, float& rx, float& ry, float& rz) const {
-        Quaternion v(0.0f, vx, vy, vz);
-        Quaternion conj(w, -x, -y, -z);
-        Quaternion result = this->multiply(v).multiply(conj);
-        rx = result.x;
-        ry = result.y;
-        rz = result.z;
-    }
+    Quaternion conjugate() const { return { w, -x, -y, -z }; }
 };
 
-// Définition de la structure Matrice pour les transformations
-struct Matrice {
-    float m[4][4];
-
-    Matrice() {
-        for (int i = 0; i < 4; ++i)
-            for (int j = 0; j < 4; ++j)
-                m[i][j] = (i == j) ? 1 : 0; // Matrice identité
+class Camera {
+public:
+    Vector3D pos, front, up, right, worldUp;
+    float yaw, pitch, zoom;
+    float speed, sens;
+    Camera()
+            : pos(0.0f, 20.0f, 40.0f), worldUp(0.0f, 1.0f, 0.0f), yaw(-90.0f), pitch(0.0f), zoom(45.0f), speed(5.0f), sens(0.1f) {
+        update();
     }
-// Fonction pour appliquer une rotation autour de l'axe Y
-    void translate(float tx, float ty, float tz) {
-        m[3][0] += tx;
-        m[3][1] += ty;
-        m[3][2] += tz;
+    void update() {
+        front = {
+                std::cos(yaw * float(M_PI) / 180.0f) * std::cos(pitch * float(M_PI) / 180.0f),
+                std::sin(pitch * float(M_PI) / 180.0f),
+                std::sin(yaw * float(M_PI) / 180.0f) * std::cos(pitch * float(M_PI) / 180.0f)
+        };
+        front = front.normalize();
+        if (front.magnitude() < 1e-6f) front = Vector3D(0.0f, 0.0f, -1.0f);
+        right = front.cross(worldUp).normalize();
+        up = right.cross(front).normalize();
     }
-// Fonction pour appliquer une rotation autour de l'axe Y
-    void apply(float& x, float& y, float& z) const {
-        float tx = m[0][0] * x + m[1][0] * y + m[2][0] * z + m[3][0];
-        float ty = m[0][1] * x + m[1][1] * y + m[2][1] * z + m[3][1];
-        float tz = m[0][2] * x + m[1][2] * y + m[2][2] * z + m[3][2];
-        x = tx;
-        y = ty;
-        z = tz;
+    void move(char key, float dt) {
+        Vector3D v = front * (speed * dt);
+        if (key == 'w') pos = pos + v;
+        if (key == 's') pos = pos - v;
+        if (key == 'a') pos = pos - right * (speed * dt);
+        if (key == 'd') pos = pos + right * (speed * dt);
+        if (key == '+') pos = pos + worldUp * (speed * dt);
+        if (key == '-') pos = pos - worldUp * (speed * dt);
     }
+    void rotate(float dx, float dy) {
+        yaw += dx * sens;
+        pitch += dy * sens;
+        if (pitch > 89.0f) pitch = 89.0f;
+        if (pitch < -89.0f) pitch = -89.0f;
+        update();
+    }
+    void zoomIn(float dy) { zoom = clamp(zoom - dy, 1.0f, 45.0f); }
 };
 
-struct Fragment {
-    float x, y, z;
-    float vx, vy, vz;
-    float radius;
-
-    Fragment(float x_, float y_, float z_, float vx_, float vy_, float vz_, float r)
-            : x(x_), y(y_), z(z_), vx(vx_), vy(vy_), vz(vz_), radius(r) {}
-
-    void update(float deltaTime) {
-        x += vx * deltaTime;
-        y += vy * deltaTime;
-        z += vz * deltaTime;
-    }
-
-    void draw() const {
-        glPushMatrix();
-        glTranslatef(x, y, z);
-        glutSolidSphere(radius, 8, 8);
-        glPopMatrix();
-    }
-};
-
-struct Planet {
+class Planet {
+public:
     std::string name;
-    float orbitRadius;
-    float radius;
-    float orbitSpeed;
-    float angle;
-    bool active;
-    float x, y, z;
-
-    Planet(std::string n, float orbR, float r, float speed)
-            : name(n), orbitRadius(orbR), radius(r), orbitSpeed(speed), angle(0.0f), active(true), x(0), y(0), z(0) {}
-
-    void update(float deltaTime) {
-        if (!active) return;
-        angle += orbitSpeed * deltaTime;
-        if (angle > 2 * M_PI) angle -= 2 * M_PI;
-
-        Quaternion q = Quaternion::fromAxisAngle(angle, 0.0f, 1.0f, 0.0f);
-        q.rotateVector(orbitRadius, 0.0f, 0.0f, x, y, z);
-    }
-
-    void drawOrbit() const {
-        if (!active) return;
-        glColor3f(0.3f, 0.3f, 0.3f);
-        glBegin(GL_LINE_LOOP);
-        for (int i = 0; i < 100; ++i) {
-            float theta = (2.0f * M_PI * i) / 100;
-            float ox = orbitRadius * cosf(theta);
-            float oz = orbitRadius * sinf(theta);
-            glVertex3f(ox, 0.0f, oz);
-        }
-        glEnd();
-    }
-
-    void draw() const {
-        if (!active) return;
-        glPushMatrix();
-        glTranslatef(x, 0.0f, z);
-        glutSolidSphere(radius, 32, 32);
-        glPopMatrix();
-    }
-
-    void createFragments(std::vector<Fragment>& fragments) {
-        for (int i = 0; i < 50; ++i) {
-            float angle1 = static_cast<float>(rand()) / RAND_MAX * 2.0f * M_PI;
-            float angle2 = static_cast<float>(rand()) / RAND_MAX * M_PI;
-            float speed = 10.0f + static_cast<float>(rand()) / RAND_MAX * 5.0f;
-            float vx = speed * sinf(angle2) * cosf(angle1);
-            float vy = speed * cosf(angle2);
-            float vz = speed * sinf(angle2) * sinf(angle1);
-
-            fragments.emplace_back(x, y, z, vx, vy, vz, radius * 0.1f);
-        }
+    Vector3D orbitAxis;
+    float orbitRadius, radius, orbitSpeed, angle;
+    Vector3D position;
+    Planet(std::string n, float orbR, float r, float oS, Vector3D axis = Vector3D(0.0f, 1.0f, 0.0f))
+            : name(n), orbitRadius(orbR), radius(r), orbitSpeed(oS), angle(0.0f),
+              orbitAxis(axis.normalize()), position(orbR, 0.0f, 0.0f) {}
+    void update(float dt) {
+        angle += orbitSpeed * dt;
+        if (angle > 2 * float(M_PI)) angle -= 2 * float(M_PI);
+        position = Quaternion::fromAxisAngle(angle, orbitAxis.x, orbitAxis.y, orbitAxis.z).rotateVector(Vector3D(orbitRadius, 0.0f, 0.0f));
     }
 };
 
-struct Moon {
-    float orbitRadius;
-    float radius;
-    float orbitSpeed;
-    float angle;
-    bool active;
-    Matrice transformation;
-    float x, y, z;
+class SolarSystemApp {
+public:
+    static SolarSystemApp* instance;
+    Camera camera;
+    float lastF, dt;
+    int w, h;
+    std::vector<Planet> planets;
+    bool firstMouse;
+    float lastX, lastY;
 
-    Moon(float orbR, float r, float speed)
-            : orbitRadius(orbR), radius(r), orbitSpeed(speed), angle(0.0f), active(true), x(0), y(0), z(0) {}
+    SolarSystemApp(int argc, char** argv)
+            : lastF(0.0f), dt(0.0f), w(800), h(600), firstMouse(true), lastX(0.0f), lastY(0.0f) {
+        planets.emplace_back("Mercury", 8.0f, 0.5f, 4.0f, Vector3D(0.0f, 1.0f, 0.0f));
+        planets.emplace_back("Venus", 11.0f, 1.0f, 2.0f, Vector3D(0.0f, 1.0f, 0.0f));
+        planets.emplace_back("Earth", 15.0f, 1.2f, 1.0f, Vector3D(0.0f, 1.0f, 0.0f));
+        planets.emplace_back("Mars", 19.0f, 0.7f, 0.6f, Vector3D(0.0f, 1.0f, 0.0f));
+        planets.emplace_back("Jupiter", 24.0f, 3.0f, 0.3f, Vector3D(0.0f, 1.0f, 0.0f));
+        planets.emplace_back("Saturn", 30.0f, 2.5f, 0.2f, Vector3D(0.0f, 1.0f, 0.0f));
+        planets.emplace_back("Uranus", 35.0f, 2.0f, 0.15f, Vector3D(0.0f, 1.0f, 0.0f));
+        planets.emplace_back("Neptune", 40.0f, 2.0f, 0.1f, Vector3D(0.0f, 0.0f, 1.0f));
 
-    void update(float deltaTime, float earthX, float earthZ) {
-        if (!active) return;
-        angle += orbitSpeed * deltaTime;
-        if (angle > 2 * M_PI) angle -= 2 * M_PI;
+        glutInit(&argc, argv);
+        glutInitDisplayMode(GLUT_DOUBLE | GLUT_RGBA | GLUT_DEPTH);
+        glutInitWindowSize(w, h);
+        glutCreateWindow("Système Solaire (axe arbitraire)");
 
-        x = earthX + orbitRadius * cosf(angle);
-        z = earthZ + orbitRadius * sinf(angle);
-    }
-
-    void draw() const {
-        if (!active) return;
-
-        Matrice localTransform = transformation;
-        localTransform.translate(x, 0.0f, z);
-        glPushMatrix();
-        glMultMatrixf(&localTransform.m[0][0]);
-        glutSolidSphere(radius, 16, 16);
-        glPopMatrix();
-    }
-};
-
-std::vector<Planet> planets;
-Moon moon(3.0f, 0.5f, 1.5f);
-std::vector<Fragment> fragments;
-float lastTime = 0;
-bool supernovaTriggered = false;
-float sunRadius = 3.0f;
-bool sunExpanding = false;
-
-float cameraX = 0.0f, cameraY = 20.0f, cameraZ = 40.0f;
-float cameraAngleX = 0.0f, cameraAngleY = 0.0f;
-
-void keyboard(unsigned char key, int x, int y) {
-    const float moveSpeed = 2.0f;
-
-    switch (key) {
-        case 'w': cameraZ -= moveSpeed; break;
-        case 's': cameraZ += moveSpeed; break;
-        case 'a': cameraX -= moveSpeed; break;
-        case 'd': cameraX += moveSpeed; break;
-        case '+': cameraY -= moveSpeed; break;
-        case '-': cameraY += moveSpeed; break;
-        case 27: exit(0);
-        case ' ':
-            if (!supernovaTriggered) {
-                sunExpanding = true;
-            }
-            break;
-    }
-    glutPostRedisplay();
-}
-
-void specialKeys(int key, int x, int y) {
-    const float angleSpeed = 2.0f;
-
-    switch (key) {
-        case GLUT_KEY_UP: cameraAngleX -= angleSpeed; break;
-        case GLUT_KEY_DOWN: cameraAngleX += angleSpeed; break;
-        case GLUT_KEY_LEFT: cameraAngleY -= angleSpeed; break;
-        case GLUT_KEY_RIGHT: cameraAngleY += angleSpeed; break;
-    }
-    glutPostRedisplay();
-}
-
-void display() {
-    float currentTime = glutGet(GLUT_ELAPSED_TIME) / 1000.0f;
-    float deltaTime = currentTime - lastTime;
-    lastTime = currentTime;
-
-    glClearColor(0.0f, 0.0f, 0.1f, 1.0f);
-    glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
-    glLoadIdentity();
-
-    glRotatef(cameraAngleX, 1, 0, 0);
-    glRotatef(cameraAngleY, 0, 1, 0);
-    // Positionnement de la caméra
-    gluLookAt(cameraX, cameraY, cameraZ, 0, 0, 0, 0, 1, 0);
-
-    GLfloat light_position[] = { 0.0f, 0.0f, 0.0f, 1.0f };
-    GLfloat light_diffuse[] = { 1.0f, 1.0f, 1.0f, 1.0f };
-    glLightfv(GL_LIGHT0, GL_POSITION, light_position);
-    glLightfv(GL_LIGHT0, GL_DIFFUSE, light_diffuse);
-    glEnable(GL_LIGHTING);
-    glEnable(GL_LIGHT0);
-    // Positionnement de la lumière
-    glDisable(GL_LIGHTING);
-    if (sunExpanding && sunRadius < 30.0f) {
-        sunRadius += deltaTime * 10.0f;
-        for (Planet& p : planets) {
-            if (p.active && sqrtf(p.x * p.x + p.z * p.z) <= sunRadius) {
-                p.createFragments(fragments);
-                p.active = false;
-            }
+        GLenum err = glewInit();
+        if (err != GLEW_OK) {
+            std::cerr << "GLEW error: " << glewGetErrorString(err) << std::endl;
+            exit(-1);
         }
-        if (sunRadius >= 30.0f) supernovaTriggered = true;
-    }
 
-    glColor3f(1.0f, 0.6f, 0.0f);
-    glutSolidSphere(sunRadius, 32, 32);
-    glEnable(GL_LIGHTING);
-
-    for (Planet& p : planets) {
-        p.update(deltaTime);
-        glDisable(GL_LIGHTING);
-        p.drawOrbit();
+        glEnable(GL_DEPTH_TEST);
         glEnable(GL_LIGHTING);
+        glEnable(GL_NORMALIZE);
+        glEnable(GL_LIGHT0);
+        float amb[4] = { 0.2f,0.2f,0.2f,1.0f };
+        glLightModelfv(GL_LIGHT_MODEL_AMBIENT, amb);
 
-        GLfloat mat_diffuse[4];
-        if (p.name == "Mercury") mat_diffuse[0] = 0.5f, mat_diffuse[1] = 0.5f, mat_diffuse[2] = 0.5f, mat_diffuse[3] = 1.0f;
-        else if (p.name == "Venus") mat_diffuse[0] = 0.9f, mat_diffuse[1] = 0.7f, mat_diffuse[2] = 0.4f, mat_diffuse[3] = 1.0f;
-        else if (p.name == "Earth") {
-            mat_diffuse[0] = 0.0f, mat_diffuse[1] = 0.5f, mat_diffuse[2] = 1.0f, mat_diffuse[3] = 1.0f;
-            p.draw();
+        instance = this;
 
-            moon.update(deltaTime, p.x, p.z);
-            moon.draw();
-        }
-        else if (p.name == "Mars") mat_diffuse[0] = 1.0f, mat_diffuse[1] = 0.3f, mat_diffuse[2] = 0.3f, mat_diffuse[3] = 1.0f;
-        else if (p.name == "Jupiter") mat_diffuse[0] = 0.9f, mat_diffuse[1] = 0.6f, mat_diffuse[2] = 0.4f, mat_diffuse[3] = 1.0f;
-        else if (p.name == "Saturn") mat_diffuse[0] = 0.9f, mat_diffuse[1] = 0.8f, mat_diffuse[2] = 0.5f, mat_diffuse[3] = 1.0f;
-        else if (p.name == "Uranus") mat_diffuse[0] = 0.6f, mat_diffuse[1] = 0.8f, mat_diffuse[2] = 0.9f, mat_diffuse[3] = 1.0f;
-        else if (p.name == "Neptune") mat_diffuse[0] = 0.3f, mat_diffuse[1] = 0.5f, mat_diffuse[2] = 0.8f, mat_diffuse[3] = 1.0f;
-        else continue;
+        glutDisplayFunc([]() {
+            SolarSystemApp& A = *SolarSystemApp::instance;
+            float now = glutGet(GLUT_ELAPSED_TIME) * 0.001f;
+            A.dt = now - A.lastF;
+            A.lastF = now;
+            for (auto& p : A.planets) p.update(A.dt);
 
-        glMaterialfv(GL_FRONT, GL_DIFFUSE, mat_diffuse);
-        p.draw();
+            glClearColor(0.0f, 0.0f, 0.1f, 1.0f);
+            glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
+
+            glMatrixMode(GL_PROJECTION);
+            glLoadIdentity();
+            gluPerspective(A.camera.zoom, (float)A.w / (float)A.h, 0.1f, 100.0f);
+
+            glMatrixMode(GL_MODELVIEW);
+            glLoadIdentity();
+            Vector3D eye = A.camera.pos;
+            Vector3D ctr = A.camera.pos + A.camera.front;
+            Vector3D up = A.camera.up;
+            gluLookAt(eye.x, eye.y, eye.z, ctr.x, ctr.y, ctr.z, up.x, up.y, up.z);
+
+            glColor3f(1.0f, 1.0f, 0.2f);
+            glutSolidSphere(3.0f, 32, 32);
+
+            for (auto& p : A.planets) {
+                glPushMatrix();
+                glTranslatef(p.position.x, p.position.y, p.position.z);
+                glColor3f(1.0f, 1.0f, 1.0f);
+                glutSolidSphere(p.radius, 16, 16);
+                glPopMatrix();
+            }
+            glutSwapBuffers();
+        });
+
+        glutReshapeFunc([](int W, int H) {
+            SolarSystemApp::instance->w = W;
+            SolarSystemApp::instance->h = H;
+            glViewport(0, 0, W, H);
+        });
+
+        glutKeyboardFunc([](unsigned char key, int x, int y) {
+            if (key == 27) exit(0);
+            SolarSystemApp::instance->camera.move(key, SolarSystemApp::instance->dt);
+        });
+
+        glutMotionFunc([](int x, int y) {
+            SolarSystemApp& A = *SolarSystemApp::instance;
+            if (A.firstMouse) {
+                A.lastX = float(x); A.lastY = float(y);
+                A.firstMouse = false;
+            }
+            float dx = float(x) - A.lastX, dy = A.lastY - float(y);
+            A.camera.rotate(dx, dy);
+            A.lastX = float(x); A.lastY = float(y);
+        });
+
+        glutMouseFunc([](int b, int s, int x, int y) {
+            if ((b == 3 || b == 4) && s == GLUT_DOWN) {
+                SolarSystemApp::instance->camera.zoomIn((b == 3) ? -1.0f : 1.0f);
+            }
+        });
+
+        glutIdleFunc([]() { glutPostRedisplay(); });
     }
 
-    for (Fragment& f : fragments) {
-        f.update(deltaTime);
-        glColor3f(1.0f, 0.7f, 0.2f);
-        f.draw();
-    }
+    void run() { glutMainLoop(); }
+};
 
-    glutSwapBuffers();
-    glutPostRedisplay();
-}
-
-void reshape(int w, int h) {
-    glViewport(0, 0, w, h);
-    glMatrixMode(GL_PROJECTION);
-    glLoadIdentity();
-    gluPerspective(45.0f, (float)w / h, 1.0f, 200.0f);
-    glMatrixMode(GL_MODELVIEW);
-}
+SolarSystemApp* SolarSystemApp::instance = nullptr;
 
 int main(int argc, char** argv) {
-    glutInit(&argc, argv);
-    glutInitDisplayMode(GLUT_DOUBLE | GLUT_RGB | GLUT_DEPTH);
-    glutInitWindowSize(800, 600);
-    glutCreateWindow("Solar System - Supernova Version");
-    glEnable(GL_DEPTH_TEST);
-
-    planets.emplace_back("Mercury", 12.0f, 0.5f, 4.0f); // Augmenté
-    planets.emplace_back("Venus", 15.0f, 1.0f, 2.0f);    // Augmenté
-    planets.emplace_back("Earth", 18.0f, 2.0f, 1.0f);    // Augmenté
-    planets.emplace_back("Mars", 22.0f, 1.7f, 0.6f);     // Augmenté
-    planets.emplace_back("Jupiter", 28.0f, 3.0f, 0.3f);  // Augmenté
-    planets.emplace_back("Saturn", 35.0f, 2.5f, 0.2f);   // Augmenté
-    planets.emplace_back("Uranus", 42.0f, 2.0f, 0.15f);  // Augmenté
-    planets.emplace_back("Neptune", 50.0f, 2.0f, 0.1f);   // Augmenté
-
-    Moon moon(5.0f, 0.5f, 1.5f); // Augmenté l'orbite de la Lune
-
-    glutDisplayFunc(display);
-    glutReshapeFunc(reshape);
-    glutKeyboardFunc(keyboard);
-    glutSpecialFunc(specialKeys);
-    glutMainLoop();
+    SolarSystemApp app(argc, argv);
+    app.run();
     return 0;
 }
